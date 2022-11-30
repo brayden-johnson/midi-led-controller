@@ -21,7 +21,8 @@ NUM_LEDS = 144
 PORT = 'COM3'
 
 # COLOR
-RGB = [1, 200, 1]
+RGB = [255, 20, 20]
+VELOCITY_CURVE = 30
 
 
 log = logging.getLogger('midiin_poll')
@@ -47,27 +48,33 @@ def mapRange(value, inMin, inMax, outMin, outMax):
 def getLed(value):
     return int(mapRange(value, START_MIDI, END_MIDI, 1, NUM_LEDS))
 
-def sendNoteOn(value):
-    if ((value >= START_MIDI) and (value <= END_MIDI)) or ((value >= END_MIDI) and (value <= START_MIDI)):
-        led = getLed(value)
+def getVelocityRGB(value):
+    newRGB = [0] * 3
+    for i in range(len(RGB)):
+        newRGB[i] = int(mapRange(value, 0, 127 - VELOCITY_CURVE, 0, 255))
+    return newRGB
+
+def sendNoteOn(note, velocity):
+    if ((note >= START_MIDI) and (note <= END_MIDI)) or ((note >= END_MIDI) and (note <= START_MIDI)):
+        led = getLed(note)
         data = {"seg":{"i":[led-1, RGB, NUM_LEDS-led]}}
         data = json.dumps(data)
         ser.write(data.encode('ascii'))
         print(json.loads(data))
         time.sleep(0.01)
     else:
-        print("Value out of range: " + str(value))
+        print("Value out of range: " + str(note))
 
-def sendNoteOff(value):
-    if ((value >= START_MIDI) and (value <= END_MIDI)) or ((value >= END_MIDI) and (value <= START_MIDI)):
-        led = getLed(value)
+def sendNoteOff(note):
+    if ((note >= START_MIDI) and (note <= END_MIDI)) or ((note >= END_MIDI) and (note <= START_MIDI)):
+        led = getLed(note)
         data = {"seg":{"i":[led-1, [0,0,0], NUM_LEDS-led]}}
         data = json.dumps(data)
         ser.write(data.encode('ascii'))
         print(json.loads(data))
         time.sleep(0.01)
     else:
-        print("Value out of range: " + str(value))
+        print("Value out of range: " + str(note))
 
 try:
     midiin, port_name = open_midiinput(port)
@@ -111,35 +118,36 @@ try:
                     else:
                         # Not being held. Add and send
                         heldNotes[message[1]] = 127
-                        sendNoteOn(message[1])
+                        sendNoteOn(message[1], message[2])
                 else:
                     # Sustaining. If holding, then we are releasing and should remove from heldNotes but keep in sustainedNotes. Don't send serial.
                     if message[1] in heldNotes:
                         heldNotes.pop(message[1])
                         pass
                     elif message[1] in sustainedNotes:
-                        # Not holding, but already been sustained, do nothing
-                        pass
+                        # Not holding, but already been sustained, just add to held notes
+                        heldNotes[message[1]] = 127
                     else:    
                         # Not holding. Add to held notes and sustained. Send serial.
                         heldNotes[message[1]] = 127
                         sustainedNotes[message[1]] = 127
-                        sendNoteOn(message[1])
+                        sendNoteOn(message[1], message[2])
             elif(message[0] == 176 and message[1] == 64):
                 # Damper Pedal Control.. invert sustain and handle
                 if(sustain):
+                    sustain = False
                     # Remote all sustained notes. Send a serial message to turn off the LEDs not still held
                     for index, velocity in sustainedNotes.items():
                         if not index in heldNotes:
                             # The note isn't being held. Send a message to turn off light
                             sendNoteOff(index)
                     sustainedNotes = {}
-                    sustain = False
                 else:
-                    # Sustain is on. Subsequent notes should be sustained and currently held notes should be held in sustain
-                    for index, velocity in heldNotes.items():
-                        sustainedNotes[index] =  velocity
                     sustain = True
+                    # Sustain is on. Subsequent notes should be sustained and currently held notes should be held in sustain
+                    sustainedNotes = heldNotes.copy()
+                        
+                    
 
         #time.sleep(0.001)
 except KeyboardInterrupt:
