@@ -1,0 +1,13 @@
+{
+    "baud": 921600,
+    "midiStart": 100,
+    "midiEnd": 28,
+    "numLeds": 144,
+    "comPort": "COM3",
+    "RGB": [255, 20, 100],
+    "midiDevice": 1,
+    "wizLights": [
+        "172.20.7.178",
+        "172.20.7.183"
+    ]
+}
