@@ -9,5 +9,7 @@
     "wizLights": [
         "172.20.7.178",
         "172.20.7.183"
-    ]
+    ],
+    "sustain": true,
+    "lights": true
 }

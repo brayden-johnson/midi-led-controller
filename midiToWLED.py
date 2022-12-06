@@ -33,10 +33,14 @@ try:
     NUM_LEDS = config['numLeds']
     PORT = config['comPort']
     midiPort = config['midiDevice']
-    WIZLIGHTS_IPS = config['wizLights']
+    LIGHTS_ACTIVE = config['lights']
+    WIZLIGHTS_IPS = []
+    if LIGHTS_ACTIVE:
+        WIZLIGHTS_IPS = config['wizLights']
     LIGHTS = [None] * len(WIZLIGHTS_IPS)
     RGB = config['RGB']
     MAX_LIGHT_NUM_KEYS = 10
+    SUSTAIN_AWARE = config['sustain']
 except KeyError as e:
     print("ERROR: Missing config item: " + str(e.args[0]))
 
@@ -112,16 +116,19 @@ async def updateLightStates(lights):
     for i in range(len(lights)):
         light = lights[i]
         print(repr(light[1]))
+        sceneId = None
+        if light[1].get_scene_id() <= 32 and light[1].get_scene_id() >= 1:
+            sceneId = light[1].get_scene_id()
         await light[0].turn_on(pywizlight.PilotBuilder(
-            #rgb = (light[1].get_rgb() if light[1].get_rgb()[0] else [0,0,0]), 
-            brightness=light[1].get_brightness(),
-            #warm_white=light[1].get_warm_white(), 
-            #cold_white=light[1].get_cold_white(),
-            rgbww=light[1].get_rgbww(),
-            colortemp=light[1].get_colortemp(),
-            ratio=light[1].get_ratio()
-        ))
-
+                #rgb = (light[1].get_rgb() if light[1].get_rgb()[0] else [0,0,0]), 
+                brightness=light[1].get_brightness(),
+                #warm_white=light[1].get_warm_white(), 
+                #cold_white=light[1].get_cold_white(),
+                rgbww=light[1].get_rgbww(),
+                colortemp=light[1].get_colortemp(),
+                ratio=light[1].get_ratio(),
+                scene=sceneId
+            ))
 # Open Port
 try:
     midiin, port_name = open_midiinput(midiPort)
@@ -145,9 +152,10 @@ thread.start()
 
 asyncio.run_coroutine_threadsafe(setupLights(), loop)
 # Get Current State
-asyncio.run_coroutine_threadsafe(saveStates(LIGHTS), loop)
+future = asyncio.run_coroutine_threadsafe(saveStates(LIGHTS), loop)
 # Main Loop.
 
+future.result()
 print("Entering main loop. Press Control-C to exit.")
 try:
     timer = time.time()
@@ -190,7 +198,7 @@ try:
                         heldNotes[message[1]] = message[2]
                         sustainedNotes[message[1]] = message[2]
                         sendNoteOn(message[1], message[2])
-            elif(message[0] == 176 and message[1] == 64):
+            elif(SUSTAIN_AWARE and message[0] == 176 and message[1] == 64):
                 # Damper Pedal Control.. invert sustain and handle
                 if(sustain):
                     sustain = False
@@ -206,6 +214,7 @@ try:
                     sustainedNotes = heldNotes.copy()
                     # Check if there are notes being held and sustained or not
             
+            # Lights
             if(len(sustainedNotes) == 0 and len(heldNotes) == 0):
                 for light in LIGHTS:
                     future = asyncio.run_coroutine_threadsafe(updateLight(light[0], [0,0,0], 0), loop)
