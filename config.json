@@ -4,12 +4,15 @@
     "midiEnd": 28,
     "numLeds": 144,
     "comPort": "COM3",
-    "RGB": [255, 20, 100],
+    "RGB": [255, 0, 255],
+    "RGB2": [255, 50, 100],
+    "mode": "alternating",
     "midiDevice": 1,
     "wizLights": [
         "172.20.7.178",
         "172.20.7.183"
     ],
     "sustain": true,
-    "lights": true
+    "lights": false,
+    "velocity": false
 }

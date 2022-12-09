@@ -17,70 +17,59 @@ import asyncio
 from rtmidi.midiutil import open_midiinput
 del pywizlight.wizlight.__del__
 
-# Check if file exists
-config = []
-with open("config.json", "r") as jsonfile:
-    config = json.load(jsonfile)
-    print("Read successful.\n")
-
-
-# Values
-try:
-    BAUD = config['baud']
-    START_MIDI = config['midiStart']
-    END_MIDI = config['midiEnd']
-    REV_LEDS = (END_MIDI - START_MIDI) < 0
-    NUM_LEDS = config['numLeds']
-    PORT = config['comPort']
-    midiPort = config['midiDevice']
-    LIGHTS_ACTIVE = config['lights']
-    WIZLIGHTS_IPS = []
-    if LIGHTS_ACTIVE:
-        WIZLIGHTS_IPS = config['wizLights']
-    LIGHTS = [None] * len(WIZLIGHTS_IPS)
-    RGB = config['RGB']
-    MAX_LIGHT_NUM_KEYS = 10
-    SUSTAIN_AWARE = config['sustain']
-except KeyError as e:
-    print("ERROR: Missing config item: " + str(e.args[0]))
 
 # Logging
 log = logging.getLogger('midiin_poll')
 logging.basicConfig(level=logging.DEBUG)
 
-# Serial
-import serial
-ser = serial.Serial()
-ser.baudrate = BAUD
-ser.port = PORT
-ser.timeout = 10
-ser.bytesize=8
-time.sleep(1)
-ser.open()
-
 # Functions
 def mapRange(value, inMin, inMax, outMin, outMax):
     return outMin + (((value - inMin) / (inMax - inMin)) * (outMax - outMin))
 
-def getLed(value):
+def getLed(config, value):
     #return int(mapRange(value, START_MIDI, END_MIDI, 1, NUM_LEDS))
-    ret = NUM_LEDS - (value - END_MIDI) * 2
-    if( value > NUM_LEDS / 2):
+    ret = config['numLeds'] - (value - config['midiEnd']) * 2
+    if( value > config['numLeds'] / 2):
         return ret+1
     if( ret > 0 ):
         return ret
     return 0
 
-def getVelocityRGB(value):
+def getVelocityAwareRGB(rgbVal, velocity):
     newRGB = [0] * 3
-    for i in range(len(RGB)):
-        newRGB[i] = int((int(mapRange(value, 0, 127, 100, 255)) / 255) * RGB[i])
+    for i in range(len(rgbVal)):
+        newRGB[i] = int((int(mapRange(velocity, 0, 127, 100, 255)) / 255) * rgbVal[i])
     return newRGB
 
-def sendNoteOn(note, velocity):
-    if ((note >= START_MIDI) and (note <= END_MIDI)) or ((note >= END_MIDI) and (note <= START_MIDI)):
-        led = getLed(note)
-        data = {"seg":{"i":[led-1, getVelocityRGB(velocity), NUM_LEDS-led]}}
+def getGradientRGB(numLeds, rgbVal1, rgbVal2, pos):
+    newRGB = [0] * 3
+    for i in range(len(newRGB)):
+        newRGB[i] = int(mapRange(pos, 1, numLeds, rgbVal1[i], rgbVal2[i]))
+    return newRGB
+
+def getRGBValue(config, velocity, pos):
+    ## Check if Velocity Aware
+    if not config['velocity']:
+        velocity = 127 # define as max velocity
+    # Modes
+    if config['mode'] == "alternating":
+        # Alternating color mode
+        config['alternating'] = not config['alternating']
+        if not (config['alternating']):
+            return getVelocityAwareRGB(config['RGB'], velocity)
+        else:
+            return getVelocityAwareRGB(config['RGB2'], velocity)
+    elif config['mode'] == "gradient":
+        return getVelocityAwareRGB( getGradientRGB( config['numLeds'], config['RGB'], config['RGB2'], pos ), velocity)
+    elif config['mode'] == "solid":
+        # Solid color RGB across keyboard
+        return getVelocityAwareRGB(config['RGB'], velocity)
+    
+
+def sendNoteOn(ser, note, velocity, config):
+    if ((note >= config['midiStart']) and (note <= config['midiEnd'])) or ((note >= config['midiEnd']) and (note <= config['midiStart'])):
+        led = getLed(config, note)
+        data = {"seg":{"i":[led-1, getRGBValue(config, velocity, led), config['numLeds']-led]}}
         data = json.dumps(data)
         ser.write(data.encode('ascii'))
         print(json.loads(data))
@@ -88,10 +77,10 @@ def sendNoteOn(note, velocity):
     else:
         print("Value out of range: " + str(note))
 
-def sendNoteOff(note):
-    if ((note >= START_MIDI) and (note <= END_MIDI)) or ((note >= END_MIDI) and (note <= START_MIDI)):
-        led = getLed(note)
-        data = {"seg":{"i":[led-1, [0,0,0], NUM_LEDS-led]}}
+def sendNoteOff(ser, note, config):
+    if ((note >= config['midiStart']) and (note <= config['midiEnd'])) or ((note >= config['midiEnd']) and (note <= config['midiStart'])):
+        led = getLed(config, note)
+        data = {"seg":{"i":[led-1, [0,0,0], config['numLeds']-led]}}
         data = json.dumps(data)
         ser.write(data.encode('ascii'))
         print(json.loads(data))
@@ -129,110 +118,102 @@ async def updateLightStates(lights):
                 ratio=light[1].get_ratio(),
                 scene=sceneId
             ))
-# Open Port
-try:
-    midiin, port_name = open_midiinput(midiPort)
-except (EOFError, KeyboardInterrupt):
-    sys.exit()
 
 # Set up Wiz Lights
-async def setupLights():
-    if(WIZLIGHTS_IPS):
-        for i in range(len(WIZLIGHTS_IPS)):
-            LIGHTS[i] = pywizlight.wizlight(WIZLIGHTS_IPS[i])
+async def setupLights(data):
+    if(data['wizLights']):
+        for i in range(len(data['wizLights'])):
+            data['lightDevices'][i] = pywizlight.wizlight(data['wizLights'][i])
 
 def lightHandler(loop):
     asyncio.set_event_loop(loop)
     loop.run_forever()
 
 
-loop = asyncio.new_event_loop()
-thread = threading.Thread(target=lightHandler, args=(loop,), daemon=True)
-thread.start()
+def setupLightThread(data):
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=lightHandler, args=(loop,), daemon=True)
+    thread.start()
 
-asyncio.run_coroutine_threadsafe(setupLights(), loop)
-# Get Current State
-future = asyncio.run_coroutine_threadsafe(saveStates(LIGHTS), loop)
-# Main Loop.
+    asyncio.run_coroutine_threadsafe(setupLights(), loop)
+    # Get Current State
+    future = asyncio.run_coroutine_threadsafe(saveStates(data['lights']), loop)
+    future.result()
+    return loop
 
-future.result()
-print("Entering main loop. Press Control-C to exit.")
-try:
-    timer = time.time()
-    sustain = False
-    sustainedNotes = {}
-    heldNotes = {}
-    while True:
-        msg = midiin.get_message()
-
-        if msg:
-            message, deltatime = msg
-            timer += deltatime
-            print("[%s] @%0.6f %r" % (port_name, timer, message))
-            # Check if this is a noteOn Message
-            if(message[0] == 144):
-                # Note on/off.. check for sustain/held 
-                if not sustain:
-                    # Not Sustaining. Check if note is held.
-                    if message[1] in heldNotes:
-                        # Is currently held. Send an off message and remove from heldNotes
-                        heldNotes.pop(message[1])
-                        sendNoteOff(message[1])
-                    else:
-                        # Not being held. Add and send
-                        heldNotes[message[1]] = 127
-                        sendNoteOn(message[1], message[2])
+def handleMidiInput(msg, data=None):
+    if msg:
+        message, deltatime = msg
+        data['timer'] += deltatime
+        print("[%s] @%0.6f %r" % ("MIDI", data['timer'], message))
+        # Check if this is a noteOn Message
+        if(message[0] == 144):
+            # Note on/off.. check for sustain/held 
+            if not data['sustain']:
+                # Not Sustaining. Check if note is held.
+                if message[1] in data['heldNotes']:
+                    # Is currently held. Send an off message and remove from heldNotes
+                    data['heldNotes'].pop(message[1])
+                    sendNoteOff(data['serial'], message[1], data['config'])
                 else:
-                    # Sustaining. If holding, then we are releasing and should remove from heldNotes but keep in sustainedNotes. Don't send serial.
-                    if message[1] in heldNotes:
-                        heldNotes.pop(message[1])
-                        pass
-                    elif message[1] in sustainedNotes:
-                        # Not holding, but already been sustained, just add to held notes
-                        heldNotes[message[1]] = message[2]
-                        # However, update velocity // NEW
-                        sustainedNotes[message[1]] = message[2]
-                        sendNoteOn(message[1], message[2])
-                    else:    
-                        # Not holding. Add to held notes and sustained. Send serial.
-                        heldNotes[message[1]] = message[2]
-                        sustainedNotes[message[1]] = message[2]
-                        sendNoteOn(message[1], message[2])
-            elif(SUSTAIN_AWARE and message[0] == 176 and message[1] == 64):
-                # Damper Pedal Control.. invert sustain and handle
-                if(sustain):
-                    sustain = False
-                    # Remote all sustained notes. Send a serial message to turn off the LEDs not still held
-                    for index, velocity in sustainedNotes.items():
-                        if not index in heldNotes:
-                            # The note isn't being held. Send a message to turn off light
-                            sendNoteOff(index)
-                    sustainedNotes = {}
-                else:
-                    sustain = True
-                    # Sustain is on. Subsequent notes should be sustained and currently held notes should be held in sustain
-                    sustainedNotes = heldNotes.copy()
-                    # Check if there are notes being held and sustained or not
-            
-            # Lights
-            if(len(sustainedNotes) == 0 and len(heldNotes) == 0):
-                for light in LIGHTS:
-                    future = asyncio.run_coroutine_threadsafe(updateLight(light[0], [0,0,0], 0), loop)
+                    # Not being held. Add and send
+                    data['heldNotes'][message[1]] = 127
+                    sendNoteOn(data['serial'], message[1], message[2], data['config'])
             else:
-                allNotes = sustainedNotes | heldNotes
-                brightness = min(int(255 * (len(allNotes) / MAX_LIGHT_NUM_KEYS)), 255)
-                print(str(brightness))
-                for light in LIGHTS:
-                    future = asyncio.run_coroutine_threadsafe(updateLight(light[0], RGB, brightness), loop)
+                # Sustaining. If holding, then we are releasing and should remove from heldNotes but keep in sustainedNotes. Don't send serial.
+                if message[1] in data['heldNotes']:
+                    data['heldNotes'].pop(message[1])
+                    pass
+                elif message[1] in data['sustainedNotes']:
+                    # Not holding, but already been sustained, just add to held notes
+                    data['heldNotes'][message[1]] = message[2]
+                    # However, update velocity // NEW
+                    data['sustainedNotes'][message[1]] = message[2]
+                    sendNoteOn(data['serial'], message[1], message[2], data['config'])
+                else:    
+                    # Not holding. Add to held notes and sustained. Send serial.
+                    data['heldNotes'][message[1]] = message[2]
+                    data['sustainedNotes'][message[1]] = message[2]
+                    sendNoteOn(data['serial'], message[1], message[2], data['config'])
+        elif(data['config']['sustain'] and message[0] == 176 and message[1] == 64):
+            # Damper Pedal Control.. invert sustain and handle
+            if(data['sustain']):
+                data['sustain'] = False
+                # Remote all sustained notes. Send a serial message to turn off the LEDs not still held
+                for index, data['velocity'] in data['sustainedNotes'].items():
+                    if not index in data['heldNotes']:
+                        # The note isn't being held. Send a message to turn off light
+                        sendNoteOff(data['serial'], index, data['config'])
+                data['sustainedNotes'] = {}
+            else:
+                data['sustain'] = True
+                # Sustain is on. Subsequent notes should be sustained and currently held notes should be held in sustain
+                data['sustainedNotes'] = data['heldNotes'].copy()
+                # Check if there are notes being held and sustained or not
+        
+        # Lights
+        if(len(data['sustainedNotes']) == 0 and len(data['heldNotes']) == 0):
+            for light in data['lights']:
+                future = asyncio.run_coroutine_threadsafe(updateLight(light[0], [0,0,0], 0), data['lightLoop'])
+        else:
+            allNotes = data['sustainedNotes'] | data['heldNotes']
+            brightness = min(int(255 * (len(allNotes) / data['lightIntervals'])), 255)
+            print(str(brightness))
+            for i in range(len(data['lights'])):
+                light = data['lights'][i]
+                if(data['config']['mode'] != "solid" and i % 2 == 1):
+                    future = asyncio.run_coroutine_threadsafe(updateLight(light[0], data['config']['RGB'], brightness), data['lightLoop'])
+                else:
+                    future = asyncio.run_coroutine_threadsafe(updateLight(light[0], data['config']['RGB2'], brightness), data['lightLoop'])
                         
                     
 
 
-except KeyboardInterrupt:
-    print('')
-finally:
-    print("Exit.")
-    midiin.close_port()
-    endLoop = asyncio.get_event_loop()
-    endLoop.run_until_complete(updateLightStates(LIGHTS))
-    del midiin
+# except KeyboardInterrupt:
+#     print('')
+# finally:
+#     print("Exit.")
+#     midiin.close_port()
+#     endLoop = asyncio.get_event_loop()
+#     endLoop.run_until_complete(updateLightStates(LIGHTS))
+#     del midiin
