@@ -12,6 +12,7 @@ import json
 import pywizlight
 import asyncio
 import pathlib
+import music21
 
 from rtmidi.midiutil import open_midiinput
 import rtmidi
@@ -55,7 +56,7 @@ config = {
 }
 
 try:
-    with open(pathlib.PosixPath("~/Documents/LEDController/config.json").expanduser().resolve(), "r") as jsonfile:
+    with open(pathlib.Path("~/Documents/LEDController/config.json").expanduser().resolve(), "r") as jsonfile:
         config = json.load(jsonfile)
         print("Read successful.\n")
 except:
@@ -109,20 +110,22 @@ modeList = sg.Frame("Mode", [[sg.Combo(modeOptions, key='selectedMode', default_
 
 # Create fields in the gui for the config items
 velocityButton = sg.Button('', image_data=toggle_btn_on if velocityAwareConfig else toggle_btn_off, key='toggleVelocity', button_color=(sg.theme_background_color(), sg.theme_background_color()), border_width=0)
-
-
+lightsButton = sg.Button('', image_data=toggle_btn_on if lightsActiveConfig else toggle_btn_off, key='toggleLights', button_color=(sg.theme_background_color(), sg.theme_background_color()), border_width=0)
 sustainButton = sg.Button('', image_data=toggle_btn_on if sustainAwareConfig else toggle_btn_off, key='toggleSustain', button_color=(sg.theme_background_color(), sg.theme_background_color()), border_width=0)
 
 sustainControl = [sg.Text('Sustain: '), sustainButton]
 velocityControl = [sg.Text("Velocity: "), velocityButton]
+lightsControl = [sg.Text("Lights: "), lightsButton]
 
 startMidiControl = [sg.Text("Start Midi:"), sg.Button(str(startMidiConfig) if startMidiConfig is not None else 'NONE', key='startMidi')]
 endMidiControl = [sg.Text("End Midi:"), sg.Button(str(endMidiConfig) if endMidiConfig is not None else 'NONE', key='endMidi')]
 
 runButton = sg.Button("RUN", key='runApp')
 
+currKey = sg.Frame("Current Key", [[sg.Text("NONE", key='key')]])
+
 # The final layout is a simple one
-layout = [[portsList, midiPortsList, baudList], [sg.Frame("RGB Color 1", [[color1Hide, color1]]), sg.Frame("RGB Color 2", [[color2Hide, color2]]), modeList], [sustainControl, velocityControl], [startMidiControl, endMidiControl], [runButton]]
+layout = [[portsList, midiPortsList, baudList], [sg.Frame("RGB Color 1", [[color1Hide, color1]]), sg.Frame("RGB Color 2", [[color2Hide, color2]]), modeList], [sustainControl, velocityControl, lightsControl], [startMidiControl, endMidiControl], [currKey], [runButton]]
 
 # A perhaps better layout would have been to use the vtop layout helpful function.
 # This would allow the col2 column to have a different height and still be top aligned
@@ -152,7 +155,9 @@ data = {
     'timer': timer,
     'lightLoop': None,
     'lightIntervals': 5,
-    'serial': ser
+    'serial': ser,
+    'cachedNotes': music21.stream.Score(),
+    'window': window
 }
 
 # Define Midi Connection
@@ -173,6 +178,11 @@ def getNewMidiValue():
             if(message[0] == 144):
                 return message[1]
             
+
+# Set up light loop if not done so and default is for lights active
+if( lightsActiveConfig ):
+    midiToWLED.setupLightThread(data)
+
 
 while True:
     event, values = window.read()
@@ -198,6 +208,20 @@ while True:
             window['toggleSustain'].update(image_data=toggle_btn_on)
         sustainAwareConfig = not sustainAwareConfig
         config['sustain'] = sustainAwareConfig
+    if event == "toggleLights":
+        print("Toggling lights")
+        if(lightsActiveConfig):
+            # Is true, set to off
+            window['toggleLights'].update(image_data=toggle_btn_off)
+            # Revert lights..
+            asyncio.run_coroutine_threadsafe(midiToWLED.updateLightStates(data['lights']), data['lightLoop']).result()
+            data['lights'] = []
+        else:
+            # Is off, turn on
+            window['toggleLights'].update(image_data=toggle_btn_on)
+            data['lightLoop'] = midiToWLED.setupLightThread(data)
+        lightsActiveConfig = not lightsActiveConfig
+        config['lights'] = not config['lights']
     if event == "rgb1":
         print(values[event])
         window['color1'].update(button_color=(values[event]))
@@ -226,14 +250,14 @@ while True:
         print(str(comPortConfig))
     if event == 'startMidi':
         # Get new value and set
-        startWindow = sg.Window(title='Configuring Midi START', layout=[[sg.Label("Press a midi key...")]], modal=True)
+        startWindow = sg.Window(title='Configuring Midi START', layout=[[sg.Text("Press a midi key...")]], modal=True)
         newmidi = getNewMidiValue()
         config['startMidi'] = newmidi
         startMidiConfig = newmidi
         startWindow.close()
     if event == 'endMidi':
         # Get new value and set
-        endWindow = sg.Window(title='Configuring Midi END', layout=[[sg.Label("Press a midi key...")]], modal=True)
+        endWindow = sg.Window(title='Configuring Midi END', layout=[[sg.Text("Press a midi key...")]], modal=True)
         newmidi = getNewMidiValue()
         config['endMidi'] = newmidi
         endMidiConfig = newmidi
@@ -270,9 +294,15 @@ while True:
 
 
 try:
-    with open(pathlib.PosixPath("~/Documents/LEDController/config.json").expanduser().resolve(), "r") as jsonfile:
-        jsonfile.write(json.dumps(config))
+    filepath = pathlib.Path("~/Documents/LEDController/").expanduser().resolve()
+    if not filepath.exists():
+        filepath.mkdir(parents=True, exist_ok=True)
+except Exception as e:
+    print("Create directory fail :" + str(e))
+try:
+    with open(filepath.joinpath("./config.json"), "w") as jsonfile:
+        json.dump(config, fp=jsonfile)
         print("Write successful.\n")
-except:
-    print("Write fail.")
+except Exception as e:
+    print("Write fail: " + str(e))
 window.close()

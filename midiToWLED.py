@@ -14,6 +14,8 @@ import json
 import pywizlight
 import asyncio
 import multiprocessing
+import music21
+import PySimpleGUI as sg
 
 from rtmidi.midiutil import open_midiinput
 del pywizlight.wizlight.__del__
@@ -134,11 +136,15 @@ def lightHandler(loop):
 
 
 def setupLightThread(data):
-    loop = asyncio.new_event_loop()
-    thread = threading.Thread(target=lightHandler, args=(loop,), daemon=True)
-    thread.start()
+    loop = None
+    if not data['lightLoop']:
+        loop = asyncio.new_event_loop()
+        thread = threading.Thread(target=lightHandler, args=(loop,), daemon=True)
+        thread.start()
+    else:
+        loop = data['lightLoop']
 
-    asyncio.run_coroutine_threadsafe(setupLights(), loop)
+    asyncio.run_coroutine_threadsafe(setupLights(data), loop)
     # Get Current State
     future = asyncio.run_coroutine_threadsafe(saveStates(data['lights']), loop)
     future.result()
@@ -151,6 +157,12 @@ def handleMidiInput(msg, data=None):
         print("[%s] @%0.6f %r" % ("MIDI", data['timer'], message))
         # Check if this is a noteOn Message
         if(message[0] == 144):
+            # Add to cached notes
+            if len(data['cachedNotes']) >= 20:
+                data['cachedNotes'].pop(0)
+            data['cachedNotes'].append(music21.note.Note(music21.pitch.Pitch(message[1])))
+            # Update the key
+            data['window']['key'].update(text=str(data['cachedNotes'].analyze('key')))
             # Note on/off.. check for sustain/held 
             if not data['sustain']:
                 # Not Sustaining. Check if note is held.
@@ -201,15 +213,12 @@ def handleMidiInput(msg, data=None):
             for light in data['lights']:
                 future = asyncio.run_coroutine_threadsafe(updateLight(light[0], [0,0,0], 0), data['lightLoop'])
         else:
-            allNotes = data['sustainedNotes'] | data['heldNotes']
-            brightness = min(int(255 * (len(allNotes) / data['lightIntervals'])), 255)
-            print(str(brightness))
             for i in range(len(data['lights'])):
                 light = data['lights'][i]
                 if(data['config']['mode'] != "solid" and i % 2 == 1):
-                    future = asyncio.run_coroutine_threadsafe(updateLight(light[0], data['config']['RGB'], brightness), data['lightLoop'])
+                    future = asyncio.run_coroutine_threadsafe(updateLight(light[0], data['config']['RGB'], 255), data['lightLoop'])
                 else:
-                    future = asyncio.run_coroutine_threadsafe(updateLight(light[0], data['config']['RGB2'], brightness), data['lightLoop'])
+                    future = asyncio.run_coroutine_threadsafe(updateLight(light[0], data['config']['RGB2'], 255), data['lightLoop'])
                         
                     
 
