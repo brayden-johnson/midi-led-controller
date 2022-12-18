@@ -77,6 +77,21 @@ def sendNoteOn(ser, note, velocity, config):
     else:
         print("Value out of range: " + str(note))
 
+def sendSustainRelease(ser, note, config):
+    # If release value is set to <0, then do not process
+    if(config['sustainFadeTime'] < 0):
+        return
+    if ((note >= config['midiStart']) and (note <= config['midiEnd'])) or ((note >= config['midiEnd']) and (note <= config['midiStart'])):
+        led = getLed(config, note)
+        data = {"state":{"tt": config['sustainFadeTime']}, "seg":{"i":[led-1, [0,0,0], config['numLeds']-led]}}
+        data = json.dumps(data)
+        ser.write(data.encode('ascii'))
+        print(json.loads(data))
+        time.sleep(0.01)
+    else:
+        print("Value out of range: " + str(note))
+
+
 def sendNoteOff(ser, note, config):
     if ((note >= config['midiStart']) and (note <= config['midiEnd'])) or ((note >= config['midiEnd']) and (note <= config['midiStart'])):
         led = getLed(config, note)
@@ -163,6 +178,8 @@ def handleMidiInput(msg, data=None):
                 # Sustaining. If holding, then we are releasing and should remove from heldNotes but keep in sustainedNotes. Don't send serial.
                 if message[1] in data['heldNotes']:
                     data['heldNotes'].pop(message[1])
+                    # Send sustain release
+                    sendSustainRelease(data['serial'], message[1], data['config'])
                     pass
                 elif message[1] in data['sustainedNotes']:
                     # Not holding, but already been sustained, just add to held notes

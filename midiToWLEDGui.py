@@ -50,7 +50,8 @@ config = {
     "sustain": True,
     "lights": False,
     "velocity": False,
-    "alternating": False
+    "alternating": False,
+    "sustainFadeTime": 10
 }
 
 try:
@@ -101,6 +102,9 @@ color2Hide = sg.In("", visible=False, enable_events=True, key='rgb2')
 color1 = sg.ColorChooserButton("", button_color=rgb_to_hex(rgb1Config), key="color1", target='rgb1', size=10)
 color2 = sg.ColorChooserButton("", button_color=rgb_to_hex(rgb2Config), key="color2", target='rgb2', size=10)
 
+# Define Mode Options
+modeOptions = ["alternating", "gradient", "solid"]
+modeList = sg.Frame("Mode", [[sg.Combo(modeOptions, key='selectedMode', default_value=modeConfig, enable_events=True)]])
 
 
 # Create fields in the gui for the config items
@@ -112,13 +116,13 @@ sustainButton = sg.Button('', image_data=toggle_btn_on if sustainAwareConfig els
 sustainControl = [sg.Text('Sustain: '), sustainButton]
 velocityControl = [sg.Text("Velocity: "), velocityButton]
 
-startMidiControl = sg.Button('Start Midi: ' + str(startMidiConfig) if startMidiConfig is not None else 'NONE', key='startMidi')
-endMidiControl = sg.Button('Start Midi: ' + str(endMidiConfig) if endMidiConfig is not None else 'NONE', key='endMidi')
+startMidiControl = [sg.Label("Start Midi:"), sg.Button(str(startMidiConfig) if startMidiConfig is not None else 'NONE', key='startMidi')]
+endMidiControl = [sg.Label("End Midi:"), sg.Button(str(endMidiConfig) if endMidiConfig is not None else 'NONE', key='endMidi')]
 
 runButton = sg.Button("RUN", key='runApp')
 
 # The final layout is a simple one
-layout = [[portsList, midiPortsList, baudList], [sg.Frame("RGB Color 1", [[color1Hide, color1]]), sg.Frame("RGB Color 2", [[color2Hide, color2]])], [sustainControl, velocityControl], [startMidiControl, endMidiControl], [runButton]]
+layout = [[portsList, midiPortsList, baudList], [sg.Frame("RGB Color 1", [[color1Hide, color1]]), sg.Frame("RGB Color 2", [[color2Hide, color2]]), modeList], [sustainControl, velocityControl], [startMidiControl, endMidiControl], [runButton]]
 
 # A perhaps better layout would have been to use the vtop layout helpful function.
 # This would allow the col2 column to have a different height and still be top aligned
@@ -153,6 +157,25 @@ data = {
 
 # Define Midi Connection
 midiin = None
+
+# Define a variable to store the state of the lights before running
+saveLedState = None
+
+# Define midi config function
+def getNewMidiValue():
+    if midiPortConfig is None:
+        sg.Popup("Please select a midi device before proceding")
+        return
+    else:
+        if not running:
+            # Not running, open midi port
+            midiin, portname = rtmidi.midiutil.open_midiinput(midiPortConfig)
+        # Get the value
+        while True:
+            message, deltatime = midiin.get_message()
+            if(message[0] == 144):
+                return message[1]
+            
 
 while True:
     event, values = window.read()
@@ -192,6 +215,9 @@ while True:
         config['baud'] = values['selectedBaud']
         ser.baudrate = values['selectedBaud']
         baudConfig = values['selectedBaud']
+    if event == "selectedMode":
+        config['mode'] = values['selectedMode']
+        modeConfig = values['selectedMode']
     if event == 'midiPort':
         midiPortConfig = trimmedPorts.index(values['midiPort'])
         config['midiDevice'] = midiPortConfig
@@ -201,29 +227,59 @@ while True:
         config['comPort'] = comPortConfig
         ser.port = comPortConfig
         print(str(comPortConfig))
+    if event == 'startMidi':
+        # Get new value and set
+        startWindow = sg.Window(title='Configuring Midi START', layout=[[sg.Label("Press a midi key...")]], modal=True)
+        newmidi = getNewMidiValue()
+        config['startMidi'] = newmidi
+        startMidiConfig = newmidi
+        startWindow.close()
+    if event == 'endMidi':
+        # Get new value and set
+        endWindow = sg.Window(title='Configuring Midi END', layout=[[sg.Label("Press a midi key...")]], modal=True)
+        newmidi = getNewMidiValue()
+        config['endMidi'] = newmidi
+        endMidiConfig = newmidi
+        endWindow.close()
     if event == "runApp":
         if running:
             # Stop
+            running = False
+            ser.write(json.dumps(saveLedState).encode('ascii'))
             ser.close()
             midiin.close_port()
             window['selectedBaud'].update(disabled=False)
             window['midiPort'].update(disabled=False)
             window['comPort'].update(disabled=False)
+            window['runApp'].update(button_text="RUN")
             print("CLOSED!")
         else:
             # Check that midi, com port, and baud are defined
             if(baudConfig is not None and midiPortConfig is not None and comPortConfig is not None):
                 running = True
                 ser.open()
+                # Get initial state
+                ser.write(json.dumps({"v": True}).encode('ascii'))
+                storeLedState = json.loads(ser.read_all())
+                # Save state and set brightness
+                initData = {"state":{"on": True, "bri": 255}}
+                initiData = json.dumps(data)
+                ser.write(initData.encode('ascii'))
                 midiin, portname = rtmidi.midiutil.open_midiinput(midiPortConfig)
                 midiin.set_callback(midiToWLED.handleMidiInput, data=data)
                 window['selectedBaud'].update(disabled=True)
                 window['midiPort'].update(disabled=True)
                 window['comPort'].update(disabled=True)
+                window['runApp'].update(button_text="STOP")
                 print("RUNNING!")
 
 
 
 
-
+try:
+    with open(pathlib.PosixPath("~/Documents/LEDController/config.json").expanduser().resolve(), "r") as jsonfile:
+        jsonfile.write(json.dumps(config))
+        print("Write successful.\n")
+except:
+    print("Write fail.")
 window.close()
