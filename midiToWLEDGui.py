@@ -116,8 +116,8 @@ sustainButton = sg.Button('', image_data=toggle_btn_on if sustainAwareConfig els
 sustainControl = [sg.Text('Sustain: '), sustainButton]
 velocityControl = [sg.Text("Velocity: "), velocityButton]
 
-startMidiControl = [sg.Label("Start Midi:"), sg.Button(str(startMidiConfig) if startMidiConfig is not None else 'NONE', key='startMidi')]
-endMidiControl = [sg.Label("End Midi:"), sg.Button(str(endMidiConfig) if endMidiConfig is not None else 'NONE', key='endMidi')]
+startMidiControl = [sg.Text("Start Midi:"), sg.Button(str(startMidiConfig) if startMidiConfig is not None else 'NONE', key='startMidi')]
+endMidiControl = [sg.Text("End Midi:"), sg.Button(str(endMidiConfig) if endMidiConfig is not None else 'NONE', key='endMidi')]
 
 runButton = sg.Button("RUN", key='runApp')
 
@@ -157,9 +157,6 @@ data = {
 
 # Define Midi Connection
 midiin = None
-
-# Define a variable to store the state of the lights before running
-saveLedState = None
 
 # Define midi config function
 def getNewMidiValue():
@@ -245,32 +242,28 @@ while True:
         if running:
             # Stop
             running = False
-            ser.write(json.dumps(saveLedState).encode('ascii'))
             ser.close()
             midiin.close_port()
             window['selectedBaud'].update(disabled=False)
             window['midiPort'].update(disabled=False)
             window['comPort'].update(disabled=False)
-            window['runApp'].update(button_text="RUN")
+            window['runApp'].update(text="RUN")
             print("CLOSED!")
         else:
             # Check that midi, com port, and baud are defined
             if(baudConfig is not None and midiPortConfig is not None and comPortConfig is not None):
                 running = True
                 ser.open()
-                # Get initial state
-                ser.write(json.dumps({"v": True}).encode('ascii'))
-                storeLedState = json.loads(ser.read_all())
                 # Save state and set brightness
                 initData = {"state":{"on": True, "bri": 255}}
-                initiData = json.dumps(data)
+                initData = json.dumps(initData)
                 ser.write(initData.encode('ascii'))
                 midiin, portname = rtmidi.midiutil.open_midiinput(midiPortConfig)
                 midiin.set_callback(midiToWLED.handleMidiInput, data=data)
                 window['selectedBaud'].update(disabled=True)
                 window['midiPort'].update(disabled=True)
                 window['comPort'].update(disabled=True)
-                window['runApp'].update(button_text="STOP")
+                window['runApp'].update(text="STOP")
                 print("RUNNING!")
 
 

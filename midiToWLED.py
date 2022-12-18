@@ -13,6 +13,7 @@ import time
 import json
 import pywizlight
 import asyncio
+import multiprocessing
 
 from rtmidi.midiutil import open_midiinput
 del pywizlight.wizlight.__del__
@@ -77,19 +78,6 @@ def sendNoteOn(ser, note, velocity, config):
     else:
         print("Value out of range: " + str(note))
 
-def sendSustainRelease(ser, note, config):
-    # If release value is set to <0, then do not process
-    if(config['sustainFadeTime'] < 0):
-        return
-    if ((note >= config['midiStart']) and (note <= config['midiEnd'])) or ((note >= config['midiEnd']) and (note <= config['midiStart'])):
-        led = getLed(config, note)
-        data = {"state":{"tt": config['sustainFadeTime']}, "seg":{"i":[led-1, [0,0,0], config['numLeds']-led]}}
-        data = json.dumps(data)
-        ser.write(data.encode('ascii'))
-        print(json.loads(data))
-        time.sleep(0.01)
-    else:
-        print("Value out of range: " + str(note))
 
 
 def sendNoteOff(ser, note, config):
@@ -178,8 +166,6 @@ def handleMidiInput(msg, data=None):
                 # Sustaining. If holding, then we are releasing and should remove from heldNotes but keep in sustainedNotes. Don't send serial.
                 if message[1] in data['heldNotes']:
                     data['heldNotes'].pop(message[1])
-                    # Send sustain release
-                    sendSustainRelease(data['serial'], message[1], data['config'])
                     pass
                 elif message[1] in data['sustainedNotes']:
                     # Not holding, but already been sustained, just add to held notes
@@ -197,8 +183,10 @@ def handleMidiInput(msg, data=None):
             if(data['sustain']):
                 data['sustain'] = False
                 # Remote all sustained notes. Send a serial message to turn off the LEDs not still held
-                for index, data['velocity'] in data['sustainedNotes'].items():
+                for index, velocity in data['sustainedNotes'].items():
                     if not index in data['heldNotes']:
+                        if index in data['sustainedThreads']:
+                            data['sustainedThreads'][index].stop()
                         # The note isn't being held. Send a message to turn off light
                         sendNoteOff(data['serial'], index, data['config'])
                 data['sustainedNotes'] = {}
