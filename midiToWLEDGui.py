@@ -12,7 +12,8 @@ import json
 import pywizlight
 import asyncio
 import pathlib
-import music21
+import pychord
+import pretty_midi
 
 from rtmidi.midiutil import open_midiinput
 import rtmidi
@@ -122,11 +123,10 @@ endMidiControl = [sg.Text("End Midi:"), sg.Button(str(endMidiConfig) if endMidiC
 
 runButton = sg.Button("RUN", key='runApp')
 
-currKey = sg.Frame("Current Key", [[sg.Text("NONE", key='key')]])
 currChord = sg.Frame("Current Chord", [[sg.Text("NONE", key='chord')]])
 
 # The final layout is a simple one
-layout = [[portsList, midiPortsList, baudList], [sg.Frame("RGB Color 1", [[color1Hide, color1]]), sg.Frame("RGB Color 2", [[color2Hide, color2]]), modeList], [sustainControl, velocityControl, lightsControl], [startMidiControl, endMidiControl], [currKey, currChord], [runButton]]
+layout = [[portsList, midiPortsList, baudList], [sg.Frame("RGB Color 1", [[color1Hide, color1]]), sg.Frame("RGB Color 2", [[color2Hide, color2]]), modeList], [sustainControl, velocityControl, lightsControl], [startMidiControl, endMidiControl], [currChord], [runButton]]
 
 # A perhaps better layout would have been to use the vtop layout helpful function.
 # This would allow the col2 column to have a different height and still be top aligned
@@ -157,7 +157,6 @@ data = {
     'lightLoop': None,
     'lightIntervals': 5,
     'serial': ser,
-    'cachedNotes': music21.stream.Score(),
     'window': window
 }
 
@@ -187,26 +186,23 @@ if( lightsActiveConfig ):
 # Define key and chord analysis
 def currChord():
     # Chord Analysis
-    chord = music21.chord.Chord()
+    notes = []
     for note, velocity in data['heldNotes'].items():
-        chord.add(note)
-    window['chord'].update(str(chord.pitchedCommonName))
-
-def currKey():
-    # Key Analysis
-    key = data['cachedNotes'].analyze('key')
-    window['key'].update(str(key))
+        notes.append(pretty_midi.note_number_to_name(note))
+    chordname = "NONE"
+    if(len(notes) > 0):
+        chordname = str(pychord.find_chords_from_notes(notes))
+    window['chord'].update(chordname)
 
 # Every second find the key in a separate thread
-def keyHandler():
+def analysisHandler():
     while True:
         time.sleep(1)
         if(running):
-            currKey()
             currChord()
 
-keythread = threading.Thread(target=keyHandler, daemon=True)
-keythread.start()
+analyzeThread = threading.Thread(target=analysisHandler, daemon=True)
+analyzeThread.start()
 
 while True:
     event, values = window.read()
