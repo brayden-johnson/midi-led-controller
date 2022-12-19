@@ -15,7 +15,6 @@ import pywizlight
 import asyncio
 import multiprocessing
 import music21
-import mingus
 import PySimpleGUI as sg
 
 from rtmidi.midiutil import open_midiinput
@@ -208,15 +207,10 @@ def handleMidiInput(msg, data=None):
                 # Check if there are notes being held and sustained or not
         
         # Chord Analysis
-        notes = []
-        for note, velocity in data['heldNotes']:
-            notename = music21.note.Note(note)._getName()
-            if notename[len(notename)-1] == '-':
-                notename = notename[:-1] + 'b' # change minus to flat notation
-            notes.append(notename)
-            
-        chords = mingus.chords.determine(notes, True)
-        data['window']['chord'].update(str(chords))
+        chord = music21.chord.Chord()
+        for note, velocity in data['heldNotes'].items():
+            chord.add(note)
+        data['window']['chord'].update(str(chord.pitchedCommonName))
         
         # Lights
         if(len(data['sustainedNotes']) == 0 and len(data['heldNotes']) == 0):
