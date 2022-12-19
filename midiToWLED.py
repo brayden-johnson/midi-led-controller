@@ -206,11 +206,11 @@ def handleMidiInput(msg, data=None):
                 data['sustainedNotes'] = data['heldNotes'].copy()
                 # Check if there are notes being held and sustained or not
         
-        # Chord Analysis
-        chord = music21.chord.Chord()
-        for note, velocity in data['heldNotes'].items():
-            chord.add(note)
-        data['window']['chord'].update(str(chord.pitchedCommonName))
+        # # Chord Analysis
+        # chord = music21.chord.Chord()
+        # for note, velocity in data['heldNotes'].items():
+        #     chord.add(note)
+        # data['window']['chord'].update(str(chord.pitchedCommonName))
         
         # Lights
         if(len(data['sustainedNotes']) == 0 and len(data['heldNotes']) == 0):
