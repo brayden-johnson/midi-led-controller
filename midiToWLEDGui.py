@@ -12,7 +12,7 @@ import json
 import pywizlight
 import asyncio
 import pathlib
-import pychord
+import mingus.core.chords as ChordFinder
 import pretty_midi
 
 from rtmidi.midiutil import open_midiinput
@@ -188,10 +188,10 @@ def currChord():
     # Chord Analysis
     notes = []
     for note, velocity in data['heldNotes'].items():
-        notes.append(pretty_midi.note_number_to_name(note))
+        notes.append(pretty_midi.note_number_to_name(note)[:-1])
     chordname = "NONE"
     if(len(notes) > 0):
-        chordname = str(pychord.find_chords_from_notes(notes))
+        chordname = str(ChordFinder.determine(notes, True))
     window['chord'].update(chordname)
 
 # Every second find the key in a separate thread
