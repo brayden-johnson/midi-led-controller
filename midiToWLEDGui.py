@@ -4,16 +4,15 @@ from __future__ import print_function
 
 import serial
 import serial.tools.list_ports
-import logging
-import sys
 import threading
 import time
 import json
-import pywizlight
 import asyncio
 import pathlib
-import mingus.core.chords as ChordFinder
+import pychord
 import pretty_midi
+from itertools import permutations
+
 
 from rtmidi.midiutil import open_midiinput
 import rtmidi
@@ -183,15 +182,28 @@ def getNewMidiValue():
 if( lightsActiveConfig ):
     midiToWLED.setupLightThread(data)
 
+def unique_cyclic_permutations(thing, length):
+    if length == 0:
+        yield (); return
+    for x in permutations(thing[1:], length - 1):
+        yield (thing[0],) + x
+    if length < len(thing):
+        yield from unique_cyclic_permutations(thing[1:], length)
+
 # Define key and chord analysis
 def currChord():
     # Chord Analysis
     notes = []
     for note, velocity in data['heldNotes'].items():
         notes.append(pretty_midi.note_number_to_name(note)[:-1])
+    # Get unique cyclic permutations of notes
+    all_notes = unique_cyclic_permutations(notes, len(notes))
+    chords = []
+    for notePermutation in all_notes:
+        chords.append(pychord.find_chords_from_notes(notePermutation))
     chordname = "NONE"
-    if(len(notes) > 0):
-        chordname = str(ChordFinder.determine(notes, True))
+    if(len(chords) > 0):
+        chordname = str(set(chords))
     window['chord'].update(chordname)
 
 # Every second find the key in a separate thread
