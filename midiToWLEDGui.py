@@ -194,17 +194,18 @@ def unique_cyclic_permutations(thing, length):
 def currChord():
     # Chord Analysis
     notes = []
-    for note in set(sorted(data['heldNotes'].keys())):
+    for note in dict(sorted(data['heldNotes'].items())).items():
         notes.append(pretty_midi.note_number_to_name(note)[:-1])
-    # Get unique cyclic permutations of notes
-    all_notes = unique_cyclic_permutations(notes, len(notes))
-    chords = []
-    for notePermutation in all_notes:
-        chords += ["{0}".format(chord) for chord in (pychord.find_chords_from_notes(notePermutation))]
-    chordname = "NONE"
-    if(len(chords) > 0):
-        chordname = str(set(chords))
-    window['chord'].update(chordname)
+    if len(notes) > 0:
+        # Get unique cyclic permutations of notes
+        all_notes = unique_cyclic_permutations(notes, len(notes))
+        chords = []
+        for notePermutation in all_notes:
+            chords += ["{0}".format(chord) for chord in (pychord.find_chords_from_notes(notePermutation))]
+        chordname = "NONE"
+        if(len(chords) > 0):
+            chordname = str(set(chords))
+        window['chord'].update(chordname)
 
 # Every second find the key in a separate thread
 def analysisHandler():
