@@ -10,6 +10,7 @@ import json
 import asyncio
 import pathlib
 import pychord
+import mingus.core.chords as ChordFinder
 import pretty_midi
 from itertools import permutations
 
@@ -200,11 +201,13 @@ def currChord():
         # Get unique cyclic permutations of notes
         all_notes = unique_cyclic_permutations(notes, len(notes))
         chords = []
+        mingus_chords = []
         for notePermutation in all_notes:
             chords += ["{0}".format(chord) for chord in (pychord.find_chords_from_notes(notePermutation))]
+            mingus_chords += ["{0}".format(chord) for chord in ChordFinder.determine(notePermutation, True)]
         chordname = "NONE"
-        if(len(chords) > 0):
-            chordname = str(set(chords))
+        if(len(chords) > 0 or len(mingus_chords) > 0):
+            chordname = str(set(chords)) + "||" + str(set(mingus_chords))
         window['chord'].update(chordname)
 
 # Every second find the key in a separate thread
