@@ -123,9 +123,10 @@ endMidiControl = [sg.Text("End Midi:"), sg.Button(str(endMidiConfig) if endMidiC
 runButton = sg.Button("RUN", key='runApp')
 
 currKey = sg.Frame("Current Key", [[sg.Text("NONE", key='key')]])
+currChord = sg.Frame("Current Chord", [[sg.Text("NONE", key='chord')]])
 
 # The final layout is a simple one
-layout = [[portsList, midiPortsList, baudList], [sg.Frame("RGB Color 1", [[color1Hide, color1]]), sg.Frame("RGB Color 2", [[color2Hide, color2]]), modeList], [sustainControl, velocityControl, lightsControl], [startMidiControl, endMidiControl], [currKey], [runButton]]
+layout = [[portsList, midiPortsList, baudList], [sg.Frame("RGB Color 1", [[color1Hide, color1]]), sg.Frame("RGB Color 2", [[color2Hide, color2]]), modeList], [sustainControl, velocityControl, lightsControl], [startMidiControl, endMidiControl], [currKey, currChord], [runButton]]
 
 # A perhaps better layout would have been to use the vtop layout helpful function.
 # This would allow the col2 column to have a different height and still be top aligned
@@ -157,6 +158,7 @@ data = {
     'lightIntervals': 5,
     'serial': ser,
     'cachedNotes': music21.stream.Score(),
+    'cachedHeld': music21.stream.Score(),
     'window': window
 }
 
@@ -224,14 +226,20 @@ while True:
         config['lights'] = not config['lights']
     if event == "rgb1":
         print(values[event])
-        window['color1'].update(button_color=(values[event]))
-        rgb1Config  = hex_to_rgb(values[event])
-        config['RGB'] = rgb1Config
+        if(values[event] == "None"):
+            pass
+        else:
+            window['color1'].update(button_color=(values[event]))
+            rgb1Config  = hex_to_rgb(values[event])
+            config['RGB'] = rgb1Config
     if event == "rgb2":
         print(values[event])
-        window['color2'].update(button_color=(values[event]))
-        rgb2Config  = hex_to_rgb(values[event])
-        config['RGB2'] = rgb2Config
+        if(values[event] == "None"):
+            pass
+        else:
+            window['color2'].update(button_color=(values[event]))
+            rgb2Config  = hex_to_rgb(values[event])
+            config['RGB2'] = rgb2Config
     if event == "selectedBaud":
         config['baud'] = values['selectedBaud']
         ser.baudrate = values['selectedBaud']

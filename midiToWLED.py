@@ -169,25 +169,30 @@ def handleMidiInput(msg, data=None):
                 if message[1] in data['heldNotes']:
                     # Is currently held. Send an off message and remove from heldNotes
                     data['heldNotes'].pop(message[1])
+                    data['cachedHeld'].pop(music21.pitch.Pitch(message[1]))
                     sendNoteOff(data['serial'], message[1], data['config'])
                 else:
                     # Not being held. Add and send
                     data['heldNotes'][message[1]] = 127
+                    data['cachedHeld'].append(music21.pitch.Pitch(message[1]))
                     sendNoteOn(data['serial'], message[1], message[2], data['config'])
             else:
                 # Sustaining. If holding, then we are releasing and should remove from heldNotes but keep in sustainedNotes. Don't send serial.
                 if message[1] in data['heldNotes']:
                     data['heldNotes'].pop(message[1])
+                    data['cachedHeld'].pop(music21.pitch.Pitch(message[1]))
                     pass
                 elif message[1] in data['sustainedNotes']:
                     # Not holding, but already been sustained, just add to held notes
                     data['heldNotes'][message[1]] = message[2]
+                    data['cachedHeld'].append(music21.pitch.Pitch(message[1]))
                     # However, update velocity // NEW
                     data['sustainedNotes'][message[1]] = message[2]
                     sendNoteOn(data['serial'], message[1], message[2], data['config'])
                 else:    
                     # Not holding. Add to held notes and sustained. Send serial.
                     data['heldNotes'][message[1]] = message[2]
+                    data['cachedHeld'].append(music21.pitch.Pitch(message[1]))
                     data['sustainedNotes'][message[1]] = message[2]
                     sendNoteOn(data['serial'], message[1], message[2], data['config'])
         elif(data['config']['sustain'] and message[0] == 176 and message[1] == 64):
@@ -197,8 +202,6 @@ def handleMidiInput(msg, data=None):
                 # Remote all sustained notes. Send a serial message to turn off the LEDs not still held
                 for index, velocity in data['sustainedNotes'].items():
                     if not index in data['heldNotes']:
-                        if index in data['sustainedThreads']:
-                            data['sustainedThreads'][index].stop()
                         # The note isn't being held. Send a message to turn off light
                         sendNoteOff(data['serial'], index, data['config'])
                 data['sustainedNotes'] = {}
