@@ -158,7 +158,6 @@ data = {
     'lightIntervals': 5,
     'serial': ser,
     'cachedNotes': music21.stream.Score(),
-    'cachedHeld': music21.stream.Score(),
     'window': window
 }
 
