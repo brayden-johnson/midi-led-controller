@@ -15,6 +15,7 @@ import pywizlight
 import asyncio
 import multiprocessing
 import music21
+import pychord
 import PySimpleGUI as sg
 
 from rtmidi.midiutil import open_midiinput
@@ -207,10 +208,11 @@ def handleMidiInput(msg, data=None):
                 # Check if there are notes being held and sustained or not
         
         # Chord Analysis
-        chord = music21.chord.Chord()
+        notes = []
         for note, velocity in data['heldNotes']:
-            chord.add(note)
-        data['window']['chord'].update(str(chord.pitchedCommonName))
+            notes.append(music21.note.Note(note)._getNameWithOctave())
+        chords = pychord.find_chords_from_notes(notes)
+        data['window']['chord'].update(str(chords))
         
         # Lights
         if(len(data['sustainedNotes']) == 0 and len(data['heldNotes']) == 0):
