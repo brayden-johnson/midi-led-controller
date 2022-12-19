@@ -174,16 +174,37 @@ def getNewMidiValue():
             # Not running, open midi port
             midiin, portname = rtmidi.midiutil.open_midiinput(midiPortConfig)
         # Get the value
-        while True:
-            message, deltatime = midiin.get_message()
-            if(message[0] == 144):
-                return message[1]
+        message, deltatime = midiin.get_message()
+        if(message[0] == 144):
+            return message[1]
             
 
 # Set up light loop if not done so and default is for lights active
 if( lightsActiveConfig ):
     midiToWLED.setupLightThread(data)
 
+# Define key and chord analysis
+def currChord():
+    # Chord Analysis
+    chord = music21.chord.Chord()
+    for note, velocity in data['heldNotes'].items():
+        chord.add(note)
+    window['chord'].update(str(chord.pitchedCommonName))
+
+def currKey():
+    # Key Analysis
+    key = data['cachedNotes'].analyze('key')
+    window['key'].update(str(key))
+
+# Every second find the key in a separate thread
+def keyHandler():
+    while running:
+        time.sleep(1)
+        currKey()
+        currChord()
+
+keythread = threading.Thread(target=keyHandler, daemon=True)
+keythread.start()
 
 while True:
     event, values = window.read()

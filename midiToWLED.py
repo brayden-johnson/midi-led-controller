@@ -13,7 +13,6 @@ import time
 import json
 import pywizlight
 import asyncio
-import multiprocessing
 import music21
 import PySimpleGUI as sg
 
@@ -158,11 +157,9 @@ def handleMidiInput(msg, data=None):
         # Check if this is a noteOn Message
         if(message[0] == 144):
             # # Add to cached notes
-            # if len(data['cachedNotes']) >= 20:
-            #     data['cachedNotes'].pop(0)
-            # data['cachedNotes'].append(music21.note.Note(music21.pitch.Pitch(message[1])))
-            # # Update the key
-            # data['window']['key'].update(str(data['cachedNotes'].analyze('key')))
+            if len(data['cachedNotes']) >= 20:
+                data['cachedNotes'].pop(0)
+            data['cachedNotes'].append(music21.note.Note(music21.pitch.Pitch(message[1])))
             # Note on/off.. check for sustain/held 
             if not data['sustain']:
                 # Not Sustaining. Check if note is held.
@@ -205,12 +202,6 @@ def handleMidiInput(msg, data=None):
                 # Sustain is on. Subsequent notes should be sustained and currently held notes should be held in sustain
                 data['sustainedNotes'] = data['heldNotes'].copy()
                 # Check if there are notes being held and sustained or not
-        
-        # # Chord Analysis
-        # chord = music21.chord.Chord()
-        # for note, velocity in data['heldNotes'].items():
-        #     chord.add(note)
-        # data['window']['chord'].update(str(chord.pitchedCommonName))
         
         # Lights
         if(len(data['sustainedNotes']) == 0 and len(data['heldNotes']) == 0):
