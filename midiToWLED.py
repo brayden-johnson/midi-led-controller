@@ -204,16 +204,17 @@ def handleMidiInput(msg, data=None):
                 # Check if there are notes being held and sustained or not
         
         # Lights
-        if(len(data['sustainedNotes']) == 0 and len(data['heldNotes']) == 0):
-            for light in data['lights']:
-                future = asyncio.run_coroutine_threadsafe(updateLight(light[0], [0,0,0], 0), data['lightLoop'])
-        else:
-            for i in range(len(data['lights'])):
-                light = data['lights'][i]
-                if(data['config']['mode'] != "solid" and i % 2 == 1):
-                    future = asyncio.run_coroutine_threadsafe(updateLight(light[0], data['config']['RGB'], 255), data['lightLoop'])
-                else:
-                    future = asyncio.run_coroutine_threadsafe(updateLight(light[0], data['config']['RGB2'], 255), data['lightLoop'])
+        if(data['config']['lights']):
+            if(len(data['sustainedNotes']) == 0 and len(data['heldNotes']) == 0):
+                for light in data['lights']:
+                    future = asyncio.run_coroutine_threadsafe(updateLight(light[0], [0,0,0], 0), data['lightLoop'])
+            else:
+                for i in range(len(data['lights'])):
+                    light = data['lights'][i]
+                    if(data['config']['mode'] != "solid" and i % 2 == 1):
+                        future = asyncio.run_coroutine_threadsafe(updateLight(light[0], data['config']['RGB'], 255), data['lightLoop'])
+                    else:
+                        future = asyncio.run_coroutine_threadsafe(updateLight(light[0], data['config']['RGB2'], 255), data['lightLoop'])
                         
                     
 

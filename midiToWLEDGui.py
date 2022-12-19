@@ -170,6 +170,7 @@ def getNewMidiValue():
         sg.Popup("Please select a midi device before proceding")
         return
     else:
+        global midiin
         if not running:
             # Not running, open midi port
             midiin, portname = rtmidi.midiutil.open_midiinput(midiPortConfig)
@@ -198,10 +199,11 @@ def currKey():
 
 # Every second find the key in a separate thread
 def keyHandler():
-    while running:
+    while True:
         time.sleep(1)
-        currKey()
-        currChord()
+        if(running):
+            currKey()
+            currChord()
 
 keythread = threading.Thread(target=keyHandler, daemon=True)
 keythread.start()
