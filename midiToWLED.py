@@ -157,12 +157,12 @@ def handleMidiInput(msg, data=None):
         print("[%s] @%0.6f %r" % ("MIDI", data['timer'], message))
         # Check if this is a noteOn Message
         if(message[0] == 144):
-            # Add to cached notes
-            if len(data['cachedNotes']) >= 20:
-                data['cachedNotes'].pop(0)
-            data['cachedNotes'].append(music21.note.Note(music21.pitch.Pitch(message[1])))
-            # Update the key
-            data['window']['key'].update(str(data['cachedNotes'].analyze('key')))
+            # # Add to cached notes
+            # if len(data['cachedNotes']) >= 20:
+            #     data['cachedNotes'].pop(0)
+            # data['cachedNotes'].append(music21.note.Note(music21.pitch.Pitch(message[1])))
+            # # Update the key
+            # data['window']['key'].update(str(data['cachedNotes'].analyze('key')))
             # Note on/off.. check for sustain/held 
             if not data['sustain']:
                 # Not Sustaining. Check if note is held.
