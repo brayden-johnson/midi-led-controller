@@ -13,8 +13,8 @@ import time
 import json
 import pywizlight
 import asyncio
-import music21
 import PySimpleGUI as sg
+import colorsys
 
 from rtmidi.midiutil import open_midiinput
 del pywizlight.wizlight.__del__
@@ -30,8 +30,8 @@ def mapRange(value, inMin, inMax, outMin, outMax):
 
 def getLed(config, value):
     #return int(mapRange(value, START_MIDI, END_MIDI, 1, NUM_LEDS))
-    ret = config['numLeds'] - (value - config['midiEnd']) * 2
-    if( value > config['numLeds'] / 2):
+    ret = config.numLeds - (value - config.midiEnd) * 2
+    if( value > config.numLeds / 2):
         return ret+1
     if( ret > 0 ):
         return ret
@@ -51,27 +51,37 @@ def getGradientRGB(numLeds, rgbVal1, rgbVal2, pos):
 
 def getRGBValue(config, velocity, pos):
     ## Check if Velocity Aware
-    if not config['velocity']:
+    if not config.velocity:
         velocity = 127 # define as max velocity
     # Modes
-    if config['mode'] == "alternating":
+    if config.mode == "alternating":
         # Alternating color mode
-        config['alternating'] = not config['alternating']
-        if not (config['alternating']):
-            return getVelocityAwareRGB(config['RGB'], velocity)
+        config.alternating = not config.alternating
+        if not (config.alternating):
+            return getVelocityAwareRGB(config.RGB, velocity)
         else:
-            return getVelocityAwareRGB(config['RGB2'], velocity)
-    elif config['mode'] == "gradient":
-        return getVelocityAwareRGB( getGradientRGB( config['numLeds'], config['RGB'], config['RGB2'], pos ), velocity)
-    elif config['mode'] == "solid":
+            return getVelocityAwareRGB(config.RGB2, velocity)
+    elif config.mode == "gradient":
+        return getVelocityAwareRGB( getGradientRGB( config.numLeds, config.RGB, config.RGB2, pos ), velocity)
+    elif config.mode == "solid":
         # Solid color RGB across keyboard
-        return getVelocityAwareRGB(config['RGB'], velocity)
+        return getVelocityAwareRGB(config.RGB, velocity)
+    elif config.mode == 'rainbowGradient':
+        # Use HSV --> Hue of rainbow goes 0 to 360
+        # Conform that 360 into one for each LED -> 360 / numLed * pos
+        hue = pos / config.numLeds #* (240 / 360)
+        rgbVal = list(colorsys.hsv_to_rgb(hue, 1, 1))
+        print(rgbVal)
+        # Replace any None with 0
+        for i in range(3):
+            rgbVal[i] = int(rgbVal[i] * 255)
+        return getVelocityAwareRGB( rgbVal, velocity )
     
 
 def sendNoteOn(ser, note, velocity, config):
-    if ((note >= config['midiStart']) and (note <= config['midiEnd'])) or ((note >= config['midiEnd']) and (note <= config['midiStart'])):
+    if ((note >= config.midiStart) and (note <= config.midiEnd)) or ((note >= config.midiEnd) and (note <= config.midiStart)):
         led = getLed(config, note)
-        data = {"seg":{"i":[led-1, getRGBValue(config, velocity, led), config['numLeds']-led]}}
+        data = {"seg":{"i":[led-1, getRGBValue(config, velocity, led), config.numLeds-led]}}
         data = json.dumps(data)
         ser.write(data.encode('ascii'))
         print(json.loads(data))
@@ -82,9 +92,9 @@ def sendNoteOn(ser, note, velocity, config):
 
 
 def sendNoteOff(ser, note, config):
-    if ((note >= config['midiStart']) and (note <= config['midiEnd'])) or ((note >= config['midiEnd']) and (note <= config['midiStart'])):
+    if ((note >= config.midiStart) and (note <= config.midiEnd)) or ((note >= config.midiEnd) and (note <= config.midiStart)):
         led = getLed(config, note)
-        data = {"seg":{"i":[led-1, [0,0,0], config['numLeds']-led]}}
+        data = {"seg":{"i":[led-1, [0,0,0], config.numLeds-led]}}
         data = json.dumps(data)
         ser.write(data.encode('ascii'))
         print(json.loads(data))
@@ -92,62 +102,62 @@ def sendNoteOff(ser, note, config):
     else:
         print("Value out of range: " + str(note))
 
-async def updateLight(light, rgbVal, brightness):
-    if(rgbVal == [0,0,0]):
-        await light.turn_off()
-    else:
-        await light.turn_on(pywizlight.PilotBuilder(rgbww = (rgbVal[0], rgbVal[1], rgbVal[2], 0, 0), brightness=brightness))
-    return
+# async def updateLight(light, rgbVal, brightness):
+#     if(rgbVal == [0,0,0]):
+#         await light.turn_off()
+#     else:
+#         await light.turn_on(pywizlight.PilotBuilder(rgbww = (rgbVal[0], rgbVal[1], rgbVal[2], 0, 0), brightness=brightness))
+#     return
 
-async def saveStates(lights):
-    for i in range(len(lights)):
-        light = lights[i]
-        state = await light.updateState()
-        lights[i] = (light, state)
+# async def saveStates(lights):
+#     for i in range(len(lights)):
+#         light = lights[i]
+#         state = await light.updateState()
+#         lights[i] = (light, state)
 
-async def updateLightStates(lights):
-    for i in range(len(lights)):
-        light = lights[i]
-        print(repr(light[1]))
-        sceneId = None
-        if light[1].get_scene_id() <= 32 and light[1].get_scene_id() >= 1:
-            sceneId = light[1].get_scene_id()
-        await light[0].turn_on(pywizlight.PilotBuilder(
-                #rgb = (light[1].get_rgb() if light[1].get_rgb()[0] else [0,0,0]), 
-                brightness=light[1].get_brightness(),
-                #warm_white=light[1].get_warm_white(), 
-                #cold_white=light[1].get_cold_white(),
-                rgbww=light[1].get_rgbww(),
-                colortemp=light[1].get_colortemp(),
-                ratio=light[1].get_ratio(),
-                scene=sceneId
-            ))
+# async def updateLightStates(lights):
+#     for i in range(len(lights)):
+#         light = lights[i]
+#         print(repr(light[1]))
+#         sceneId = None
+#         if light[1].get_scene_id() <= 32 and light[1].get_scene_id() >= 1:
+#             sceneId = light[1].get_scene_id()
+#         await light[0].turn_on(pywizlight.PilotBuilder(
+#                 #rgb = (light[1].get_rgb() if light[1].get_rgb()[0] else [0,0,0]), 
+#                 brightness=light[1].get_brightness(),
+#                 #warm_white=light[1].get_warm_white(), 
+#                 #cold_white=light[1].get_cold_white(),
+#                 rgbww=light[1].get_rgbww(),
+#                 colortemp=light[1].get_colortemp(),
+#                 ratio=light[1].get_ratio(),
+#                 scene=sceneId
+#             ))
 
 # Set up Wiz Lights
-async def setupLights(data):
-    if(data['wizLights']):
-        for i in range(len(data['wizLights'])):
-            data['lightDevices'][i] = pywizlight.wizlight(data['wizLights'][i])
+# async def setupLights(data):
+#     if(data['wizLights']):
+#         for i in range(len(data['wizLights'])):
+#             data['lightDevices'][i] = pywizlight.wizlight(data['wizLights'][i])
 
-def lightHandler(loop):
-    asyncio.set_event_loop(loop)
-    loop.run_forever()
+# def lightHandler(loop):
+#     asyncio.set_event_loop(loop)
+#     loop.run_forever()
 
 
-def setupLightThread(data):
-    loop = None
-    if not data['lightLoop']:
-        loop = asyncio.new_event_loop()
-        thread = threading.Thread(target=lightHandler, args=(loop,), daemon=True)
-        thread.start()
-    else:
-        loop = data['lightLoop']
+# def setupLightThread(data):
+#     loop = None
+#     if not data['lightLoop']:
+#         loop = asyncio.new_event_loop()
+#         thread = threading.Thread(target=lightHandler, args=(loop,), daemon=True)
+#         thread.start()
+#     else:
+#         loop = data['lightLoop']
 
-    asyncio.run_coroutine_threadsafe(setupLights(data), loop)
-    # Get Current State
-    future = asyncio.run_coroutine_threadsafe(saveStates(data['lights']), loop)
-    future.result()
-    return loop
+#     asyncio.run_coroutine_threadsafe(setupLights(data), loop)
+#     # Get Current State
+#     future = asyncio.run_coroutine_threadsafe(saveStates(data['lights']), loop)
+#     future.result()
+#     return loop
 
 def handleMidiInput(msg, data=None):
     if msg:
@@ -183,7 +193,7 @@ def handleMidiInput(msg, data=None):
                     data['heldNotes'][message[1]] = message[2]
                     data['sustainedNotes'][message[1]] = message[2]
                     sendNoteOn(data['serial'], message[1], message[2], data['config'])
-        elif(data['config']['sustain'] and message[0] == 176 and message[1] == 64):
+        elif(data['config'].sustain and message[0] == 176 and message[1] == 64):
             # Damper Pedal Control.. invert sustain and handle
             if(data['sustain']):
                 data['sustain'] = False
@@ -200,17 +210,17 @@ def handleMidiInput(msg, data=None):
                 # Check if there are notes being held and sustained or not
         
         # Lights
-        if(data['config']['lights']):
-            if(len(data['sustainedNotes']) == 0 and len(data['heldNotes']) == 0):
-                for light in data['lights']:
-                    future = asyncio.run_coroutine_threadsafe(updateLight(light[0], [0,0,0], 0), data['lightLoop'])
-            else:
-                for i in range(len(data['lights'])):
-                    light = data['lights'][i]
-                    if(data['config']['mode'] != "solid" and i % 2 == 1):
-                        future = asyncio.run_coroutine_threadsafe(updateLight(light[0], data['config']['RGB'], 255), data['lightLoop'])
-                    else:
-                        future = asyncio.run_coroutine_threadsafe(updateLight(light[0], data['config']['RGB2'], 255), data['lightLoop'])
+        # if(data['config']['lights']):
+        #     if(len(data['sustainedNotes']) == 0 and len(data['heldNotes']) == 0):
+        #         for light in data['lights']:
+        #             future = asyncio.run_coroutine_threadsafe(updateLight(light[0], [0,0,0], 0), data['lightLoop'])
+        #     else:
+        #         for i in range(len(data['lights'])):
+        #             light = data['lights'][i]
+        #             if(data['config']['mode'] != "solid" and i % 2 == 1):
+        #                 future = asyncio.run_coroutine_threadsafe(updateLight(light[0], data['config']['RGB'], 255), data['lightLoop'])
+        #             else:
+        #                 future = asyncio.run_coroutine_threadsafe(updateLight(light[0], data['config']['RGB2'], 255), data['lightLoop'])
                         
                     
 

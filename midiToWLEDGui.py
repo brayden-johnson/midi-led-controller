@@ -9,9 +9,9 @@ import time
 import json
 import asyncio
 import pathlib
-import pychord
-import mingus.core.chords as ChordFinder
-import pretty_midi
+# import pychord
+# import mingus.core.chords as ChordFinder
+# import pretty_midi
 from itertools import permutations
 
 
@@ -191,34 +191,34 @@ def unique_cyclic_permutations(thing, length):
     if length < len(thing):
         yield from unique_cyclic_permutations(thing[1:], length)
 
-# Define key and chord analysis
-def currChord():
-    # Chord Analysis
-    notes = []
-    for note in dict(sorted(data['heldNotes'].items())).items():
-        notes.append(pretty_midi.note_number_to_name(note)[:-1])
-    if len(notes) > 0:
-        # Get unique cyclic permutations of notes
-        all_notes = unique_cyclic_permutations(notes, len(notes))
-        chords = []
-        mingus_chords = []
-        for notePermutation in all_notes:
-            chords += ["{0}".format(chord) for chord in (pychord.find_chords_from_notes(notePermutation))]
-            mingus_chords += ["{0}".format(chord) for chord in ChordFinder.determine(notePermutation, True)]
-        chordname = "NONE"
-        if(len(chords) > 0 or len(mingus_chords) > 0):
-            chordname = str(set(chords)) + "||" + str(set(mingus_chords))
-        window['chord'].update(chordname)
+# # Define key and chord analysis
+# def currChord():
+#     # Chord Analysis
+#     notes = []
+#     for note in dict(sorted(data['heldNotes'].items())).items():
+#         notes.append(pretty_midi.note_number_to_name(note)[:-1])
+#     if len(notes) > 0:
+#         # Get unique cyclic permutations of notes
+#         all_notes = unique_cyclic_permutations(notes, len(notes))
+#         chords = []
+#         mingus_chords = []
+#         for notePermutation in all_notes:
+#             chords += ["{0}".format(chord) for chord in (pychord.find_chords_from_notes(notePermutation))]
+#             mingus_chords += ["{0}".format(chord) for chord in ChordFinder.determine(notePermutation, True)]
+#         chordname = "NONE"
+#         if(len(chords) > 0 or len(mingus_chords) > 0):
+#             chordname = str(set(chords)) + "||" + str(set(mingus_chords))
+#         window['chord'].update(chordname)
 
 # Every second find the key in a separate thread
-def analysisHandler():
-    while True:
-        time.sleep(1)
-        if(running):
-            currChord()
+# def analysisHandler():
+#     while True:
+#         time.sleep(1)
+#         if(running):
+#             currChord()
 
-analyzeThread = threading.Thread(target=analysisHandler, daemon=True)
-analyzeThread.start()
+# analyzeThread = threading.Thread(target=analysisHandler, daemon=True)
+# analyzeThread.start()
 
 while True:
     event, values = window.read()
